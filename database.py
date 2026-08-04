@@ -28,8 +28,58 @@ def init_db():
             conn.execute(f"ALTER TABLE subscribers ADD COLUMN {column} {definition}")
         except sqlite3.OperationalError:
             pass
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            message_id INTEGER,
+            message_type TEXT,
+            text TEXT,
+            sent_at TEXT,
+            accepted_at TEXT
+        )
+        """
+    )
     conn.commit()
     conn.close()
+
+
+def log_event(chat_id: int, message_id: int, message_type: str, text: str, sent_at: str):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO events (chat_id, message_id, message_type, text, sent_at) VALUES (?, ?, ?, ?, ?)",
+        (chat_id, message_id, message_type, text, sent_at),
+    )
+    conn.commit()
+    conn.close()
+
+
+def mark_event_accepted(chat_id: int, message_id: int, accepted_at: str):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "UPDATE events SET accepted_at = ? WHERE chat_id = ? AND message_id = ?",
+        (accepted_at, chat_id, message_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_events_since(since_iso: str) -> list[tuple]:
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        """
+        SELECT e.chat_id, s.name, e.sent_at, e.message_type, e.text, e.accepted_at
+        FROM events e
+        LEFT JOIN subscribers s ON s.chat_id = e.chat_id
+        WHERE e.sent_at >= ?
+        ORDER BY e.sent_at
+        """,
+        (since_iso,),
+    ).fetchall()
+    conn.close()
+    return rows
 
 
 def get_indices(chat_id: int) -> tuple[int, int]:
