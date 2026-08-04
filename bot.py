@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import time
 from datetime import datetime, timedelta
 
 import telebot
@@ -117,4 +118,13 @@ if __name__ == "__main__":
     scheduler.start()
 
     print(f"Бот запущен. Фраз в базе: {len(PHRASES)}. Подписчиков: {db.count_subscribers()}")
-    bot.infinity_polling()
+
+    # infinity_polling может упасть целиком (например, на 409 Conflict, если на
+    # секунду пересеклись два инстанса при деплое) — процесс не должен из-за
+    # этого умирать насовсем, поэтому оборачиваем в собственный цикл перезапуска.
+    while True:
+        try:
+            bot.infinity_polling(skip_pending=True)
+        except Exception as e:
+            print(f"Polling упал с ошибкой: {e}. Перезапуск через 5 секунд...")
+            time.sleep(5)
