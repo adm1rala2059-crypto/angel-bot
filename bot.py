@@ -82,11 +82,17 @@ def handle_stop(message):
     bot.send_message(message.chat.id, "Хорошо. Ты можешь вернуться в любой момент, написав /start.")
 
 
+def send_and_log(chat_id: int, text: str, message_type: str):
+    msg = bot.send_message(chat_id, text, reply_markup=accept_keyboard())
+    db.log_event(chat_id, msg.message_id, message_type, text, datetime.now().isoformat())
+    return msg
+
+
 @bot.message_handler(commands=["now"])
 def handle_now(message):
     """Тестовая отправка одной фразы прямо сейчас — удобно для проверки, что бот жив."""
     phrase, _ = pick_phrase(-1)
-    bot.send_message(message.chat.id, phrase, reply_markup=accept_keyboard())
+    send_and_log(message.chat.id, phrase, "test")
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "accept")
@@ -97,6 +103,7 @@ def handle_accept(call):
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
     )
+    db.mark_event_accepted(call.message.chat.id, call.message.message_id, datetime.now().isoformat())
 
     _, last_gift_index = db.get_indices(call.message.chat.id)
     gift, new_gift_index = pick_gift(last_gift_index)
@@ -138,28 +145,19 @@ def broadcast_daily_phrase():
     for chat_id, _name in db.get_all_subscribers():
         last_accept_date, _, last_reengagement_date = db.get_engagement(chat_id)
 
-        if should_reengage(last_accept_date, last_reengagement_date, today):
-            text = random.choice(REENGAGEMENT_MESSAGES)
-            try:
-                bot.send_message(chat_id, text, reply_markup=accept_keyboard())
-                db.set_last_reengagement_date(chat_id, today.isoformat())
-            except telebot.apihelper.ApiException:
-                db.remove_subscriber(chat_id)
-            continue
-
-        if random.random() < QUESTION_PROBABILITY:
-            text = random.choice(QUESTIONS)
-            try:
-                bot.send_message(chat_id, text, reply_markup=accept_keyboard())
-            except telebot.apihelper.ApiException:
-                db.remove_subscriber(chat_id)
-            continue
-
-        last_index, _ = db.get_indices(chat_id)
-        phrase, new_index = pick_phrase(last_index)
         try:
-            bot.send_message(chat_id, phrase, reply_markup=accept_keyboard())
-            db.set_last_phrase_index(chat_id, new_index)
+            if should_reengage(last_accept_date, last_reengagement_date, today):
+                text = random.choice(REENGAGEMENT_MESSAGES)
+                send_and_log(chat_id, text, "reengagement")
+                db.set_last_reengagement_date(chat_id, today.isoformat())
+            elif random.random() < QUESTION_PROBABILITY:
+                text = random.choice(QUESTIONS)
+                send_and_log(chat_id, text, "question")
+            else:
+                last_index, _ = db.get_indices(chat_id)
+                phrase, new_index = pick_phrase(last_index)
+                send_and_log(chat_id, phrase, "phrase")
+                db.set_last_phrase_index(chat_id, new_index)
         except telebot.apihelper.ApiException:
             db.remove_subscriber(chat_id)
 
