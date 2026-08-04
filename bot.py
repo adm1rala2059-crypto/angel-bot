@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import telebot
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
+from telebot import types
 
 import database as db
 from keepalive import start_keepalive_server
@@ -27,14 +28,31 @@ with open("phrases.json", "r", encoding="utf-8") as f:
     _categories = json.load(f)
 PHRASES = [text for texts in _categories.values() for text in texts]
 
+with open("gifts.json", "r", encoding="utf-8") as f:
+    GIFTS = json.load(f)
 
-def pick_phrase(last_index: int) -> tuple[str, int]:
-    if len(PHRASES) == 1:
-        return PHRASES[0], 0
+
+def pick_from(pool: list[str], last_index: int) -> tuple[str, int]:
+    if len(pool) == 1:
+        return pool[0], 0
     index = last_index
     while index == last_index:
-        index = random.randrange(len(PHRASES))
-    return PHRASES[index], index
+        index = random.randrange(len(pool))
+    return pool[index], index
+
+
+def pick_phrase(last_index: int) -> tuple[str, int]:
+    return pick_from(PHRASES, last_index)
+
+
+def pick_gift(last_index: int) -> tuple[str, int]:
+    return pick_from(GIFTS, last_index)
+
+
+def accept_keyboard() -> types.InlineKeyboardMarkup:
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🙏 Принимаю", callback_data="accept"))
+    return markup
 
 
 @bot.message_handler(commands=["start"])
@@ -59,28 +77,32 @@ def handle_stop(message):
 def handle_now(message):
     """Тестовая отправка одной фразы прямо сейчас — удобно для проверки, что бот жив."""
     phrase, _ = pick_phrase(-1)
-    bot.send_message(message.chat.id, phrase)
+    bot.send_message(message.chat.id, phrase, reply_markup=accept_keyboard())
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "accept")
+def handle_accept(call):
+    bot.answer_callback_query(call.id, "💛")
+    bot.edit_message_text(
+        call.message.text + "\n\n✅ Принято",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+    )
+
+    _, last_gift_index = db.get_indices(call.message.chat.id)
+    gift, new_gift_index = pick_gift(last_gift_index)
+    db.set_last_gift_index(call.message.chat.id, new_gift_index)
+
+    bot.send_message(call.message.chat.id, f"🎁 Подарок за отклик:\n{gift}")
 
 
 def broadcast_daily_phrase():
     for chat_id, _name in db.get_all_subscribers():
-        conn = db.sqlite3.connect(db.DB_PATH)
-        row = conn.execute(
-            "SELECT last_phrase_index FROM subscribers WHERE chat_id = ?", (chat_id,)
-        ).fetchone()
-        conn.close()
-        last_index = row[0] if row else -1
-
+        last_index, _ = db.get_indices(chat_id)
         phrase, new_index = pick_phrase(last_index)
         try:
-            bot.send_message(chat_id, phrase)
-            conn = db.sqlite3.connect(db.DB_PATH)
-            conn.execute(
-                "UPDATE subscribers SET last_phrase_index = ? WHERE chat_id = ?",
-                (new_index, chat_id),
-            )
-            conn.commit()
-            conn.close()
+            bot.send_message(chat_id, phrase, reply_markup=accept_keyboard())
+            db.set_last_phrase_index(chat_id, new_index)
         except telebot.apihelper.ApiException:
             db.remove_subscriber(chat_id)
 
