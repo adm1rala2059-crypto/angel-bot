@@ -8,6 +8,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 
 import database as db
+from keepalive import start_keepalive_server
 
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
@@ -108,6 +109,8 @@ def schedule_next_day_planner(scheduler: BackgroundScheduler):
 
 
 if __name__ == "__main__":
+    start_keepalive_server()
+
     scheduler = BackgroundScheduler()
     schedule_todays_broadcast(scheduler)
     schedule_next_day_planner(scheduler)
