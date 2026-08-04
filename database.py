@@ -10,9 +10,42 @@ def init_db():
         CREATE TABLE IF NOT EXISTS subscribers (
             chat_id INTEGER PRIMARY KEY,
             name TEXT,
-            last_phrase_index INTEGER DEFAULT -1
+            last_phrase_index INTEGER DEFAULT -1,
+            last_gift_index INTEGER DEFAULT -1
         )
         """
+    )
+    try:
+        conn.execute("ALTER TABLE subscribers ADD COLUMN last_gift_index INTEGER DEFAULT -1")
+    except sqlite3.OperationalError:
+        pass
+    conn.commit()
+    conn.close()
+
+
+def get_indices(chat_id: int) -> tuple[int, int]:
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT last_phrase_index, last_gift_index FROM subscribers WHERE chat_id = ?",
+        (chat_id,),
+    ).fetchone()
+    conn.close()
+    return row if row else (-1, -1)
+
+
+def set_last_phrase_index(chat_id: int, index: int):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "UPDATE subscribers SET last_phrase_index = ? WHERE chat_id = ?", (index, chat_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_last_gift_index(chat_id: int, index: int):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "UPDATE subscribers SET last_gift_index = ? WHERE chat_id = ?", (index, chat_id)
     )
     conn.commit()
     conn.close()
