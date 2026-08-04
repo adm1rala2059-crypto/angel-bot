@@ -2,7 +2,7 @@ import json
 import os
 import random
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import telebot
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -20,6 +20,9 @@ if not TOKEN:
 SENDER_NAME = "Твой ангел-хранитель"
 SEND_WINDOW_START_HOUR = 9
 SEND_WINDOW_END_HOUR = 21
+QUESTION_PROBABILITY = 0.25
+REENGAGEMENT_AFTER_DAYS = 3
+REENGAGEMENT_REPEAT_AFTER_DAYS = 4
 
 bot = telebot.TeleBot(TOKEN)
 db.init_db()
@@ -30,6 +33,12 @@ PHRASES = [text for texts in _categories.values() for text in texts]
 
 with open("gifts.json", "r", encoding="utf-8") as f:
     GIFTS = json.load(f)
+
+with open("questions.json", "r", encoding="utf-8") as f:
+    QUESTIONS = json.load(f)
+
+with open("reengagement.json", "r", encoding="utf-8") as f:
+    REENGAGEMENT_MESSAGES = json.load(f)
 
 
 def pick_from(pool: list[str], last_index: int) -> tuple[str, int]:
@@ -93,11 +102,59 @@ def handle_accept(call):
     gift, new_gift_index = pick_gift(last_gift_index)
     db.set_last_gift_index(call.message.chat.id, new_gift_index)
 
-    bot.send_message(call.message.chat.id, f"🎁 Подарок за отклик:\n{gift}")
+    today = date.today()
+    streak = db.record_accept(
+        call.message.chat.id, today.isoformat(), (today - timedelta(days=1)).isoformat()
+    )
+    streak_line = ""
+    if streak > 1:
+        word = "день" if streak % 10 == 1 and streak % 100 != 11 else "дня" if 2 <= streak % 10 <= 4 and not 12 <= streak % 100 <= 14 else "дней"
+        streak_line = f"\n\n🔥 Серия: {streak} {word} подряд"
+
+    bot.send_message(call.message.chat.id, f"🎁 Подарок за отклик:\n{gift}{streak_line}")
+
+
+def should_reengage(last_accept_date: str | None, last_reengagement_date: str | None, today: date) -> bool:
+    reference_date = last_accept_date or last_reengagement_date
+    if reference_date is None:
+        return False  # новый подписчик, ещё рано напоминать
+
+    days_quiet = (today - date.fromisoformat(reference_date)).days
+    if last_accept_date is None:
+        return days_quiet >= REENGAGEMENT_AFTER_DAYS
+
+    if days_quiet < REENGAGEMENT_AFTER_DAYS:
+        return False
+
+    if last_reengagement_date is None:
+        return True
+
+    days_since_last_nudge = (today - date.fromisoformat(last_reengagement_date)).days
+    return days_since_last_nudge >= REENGAGEMENT_REPEAT_AFTER_DAYS
 
 
 def broadcast_daily_phrase():
+    today = date.today()
     for chat_id, _name in db.get_all_subscribers():
+        last_accept_date, _, last_reengagement_date = db.get_engagement(chat_id)
+
+        if should_reengage(last_accept_date, last_reengagement_date, today):
+            text = random.choice(REENGAGEMENT_MESSAGES)
+            try:
+                bot.send_message(chat_id, text, reply_markup=accept_keyboard())
+                db.set_last_reengagement_date(chat_id, today.isoformat())
+            except telebot.apihelper.ApiException:
+                db.remove_subscriber(chat_id)
+            continue
+
+        if random.random() < QUESTION_PROBABILITY:
+            text = random.choice(QUESTIONS)
+            try:
+                bot.send_message(chat_id, text, reply_markup=accept_keyboard())
+            except telebot.apihelper.ApiException:
+                db.remove_subscriber(chat_id)
+            continue
+
         last_index, _ = db.get_indices(chat_id)
         phrase, new_index = pick_phrase(last_index)
         try:
