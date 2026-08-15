@@ -122,7 +122,7 @@ def handle_accept(call):
 
     bot.send_message(
         call.message.chat.id,
-        f"<i>Это — тебе, здесь и сейчас:</i>\n{html.escape(gift)}{streak_line}",
+        f"<blockquote>💫 Это — тебе, здесь и сейчас:</blockquote>\n{html.escape(gift)}{streak_line}",
         parse_mode="HTML",
     )
 
