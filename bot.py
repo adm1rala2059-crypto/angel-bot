@@ -191,9 +191,15 @@ def broadcast_daily_phrase():
         except telebot.apihelper.ApiException:
             db.remove_subscriber(chat_id)
 
+    db.set_meta("last_broadcast_date", today.isoformat())
+
 
 def schedule_todays_broadcast(scheduler: BackgroundScheduler):
     now = datetime.now()
+    if db.get_meta("last_broadcast_date") == now.date().isoformat():
+        print("Рассылка на сегодня уже была — повторно не планирую (перезапуск процесса)")
+        return
+
     window_start = now.replace(hour=SEND_WINDOW_START_HOUR, minute=0, second=0, microsecond=0)
     window_end = now.replace(hour=SEND_WINDOW_END_HOUR, minute=0, second=0, microsecond=0)
 
