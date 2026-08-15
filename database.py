@@ -1,10 +1,22 @@
-import sqlite3
+import os
 
-DB_PATH = "subscribers.db"
+import libsql
+
+_conn = None
+
+
+def get_connection():
+    global _conn
+    if _conn is None:
+        _conn = libsql.connect(
+            database=os.environ["TURSO_DATABASE_URL"],
+            auth_token=os.environ["TURSO_AUTH_TOKEN"],
+        )
+    return _conn
 
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS subscribers (
@@ -18,16 +30,16 @@ def init_db():
         )
         """
     )
+
+    existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(subscribers)").fetchall()}
     for column, definition in [
         ("last_gift_index", "INTEGER DEFAULT -1"),
         ("last_accept_date", "TEXT"),
         ("streak", "INTEGER DEFAULT 0"),
         ("last_reengagement_date", "TEXT"),
     ]:
-        try:
+        if column not in existing_columns:
             conn.execute(f"ALTER TABLE subscribers ADD COLUMN {column} {definition}")
-        except sqlite3.OperationalError:
-            pass
 
     conn.execute(
         """
@@ -43,32 +55,29 @@ def init_db():
         """
     )
     conn.commit()
-    conn.close()
 
 
 def log_event(chat_id: int, message_id: int, message_type: str, text: str, sent_at: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     conn.execute(
         "INSERT INTO events (chat_id, message_id, message_type, text, sent_at) VALUES (?, ?, ?, ?, ?)",
         (chat_id, message_id, message_type, text, sent_at),
     )
     conn.commit()
-    conn.close()
 
 
 def mark_event_accepted(chat_id: int, message_id: int, accepted_at: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     conn.execute(
         "UPDATE events SET accepted_at = ? WHERE chat_id = ? AND message_id = ?",
         (accepted_at, chat_id, message_id),
     )
     conn.commit()
-    conn.close()
 
 
 def get_events_since(since_iso: str) -> list[tuple]:
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute(
+    conn = get_connection()
+    return conn.execute(
         """
         SELECT e.chat_id, s.name, e.sent_at, e.message_type, e.text, e.accepted_at
         FROM events e
@@ -78,45 +87,39 @@ def get_events_since(since_iso: str) -> list[tuple]:
         """,
         (since_iso,),
     ).fetchall()
-    conn.close()
-    return rows
 
 
 def get_indices(chat_id: int) -> tuple[int, int]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     row = conn.execute(
         "SELECT last_phrase_index, last_gift_index FROM subscribers WHERE chat_id = ?",
         (chat_id,),
     ).fetchone()
-    conn.close()
     return row if row else (-1, -1)
 
 
 def set_last_phrase_index(chat_id: int, index: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     conn.execute(
         "UPDATE subscribers SET last_phrase_index = ? WHERE chat_id = ?", (index, chat_id)
     )
     conn.commit()
-    conn.close()
 
 
 def set_last_gift_index(chat_id: int, index: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     conn.execute(
         "UPDATE subscribers SET last_gift_index = ? WHERE chat_id = ?", (index, chat_id)
     )
     conn.commit()
-    conn.close()
 
 
 def get_engagement(chat_id: int) -> tuple[str | None, int, str | None]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     row = conn.execute(
         "SELECT last_accept_date, streak, last_reengagement_date FROM subscribers WHERE chat_id = ?",
         (chat_id,),
     ).fetchone()
-    conn.close()
     return row if row else (None, 0, None)
 
 
@@ -129,52 +132,44 @@ def record_accept(chat_id: int, today: str, yesterday: str) -> int:
     else:
         new_streak = 1
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     conn.execute(
         "UPDATE subscribers SET last_accept_date = ?, streak = ? WHERE chat_id = ?",
         (today, new_streak, chat_id),
     )
     conn.commit()
-    conn.close()
     return new_streak
 
 
 def set_last_reengagement_date(chat_id: int, date_str: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     conn.execute(
         "UPDATE subscribers SET last_reengagement_date = ? WHERE chat_id = ?",
         (date_str, chat_id),
     )
     conn.commit()
-    conn.close()
 
 
 def add_subscriber(chat_id: int, name: str = ""):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     conn.execute(
         "INSERT OR IGNORE INTO subscribers (chat_id, name) VALUES (?, ?)",
         (chat_id, name),
     )
     conn.commit()
-    conn.close()
 
 
 def remove_subscriber(chat_id: int):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     conn.execute("DELETE FROM subscribers WHERE chat_id = ?", (chat_id,))
     conn.commit()
-    conn.close()
 
 
 def get_all_subscribers():
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute("SELECT chat_id, name FROM subscribers").fetchall()
-    conn.close()
-    return rows
+    conn = get_connection()
+    return conn.execute("SELECT chat_id, name FROM subscribers").fetchall()
 
 
 def count_subscribers() -> int:
-    conn = sqlite3.connect(DB_PATH)
-    n = conn.execute("SELECT COUNT(*) FROM subscribers").fetchone()[0]
-    conn.close()
-    return n
+    conn = get_connection()
+    return conn.execute("SELECT COUNT(*) FROM subscribers").fetchone()[0]
