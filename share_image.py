@@ -10,7 +10,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FONT_DIR = os.path.join(BASE_DIR, "fonts")
 BACKGROUNDS = sorted(glob.glob(os.path.join(BASE_DIR, "backgrounds", "*.jpg")))
 
-SENDER_NAME = "Твой ангел-хранитель"
+SENDER_NAME = "Голос души"
 
 
 def _load_background():
@@ -113,7 +113,7 @@ def generate_share_image(phrase: str) -> io.BytesIO:
         draw.text((bubble_x + padding, text_y), line, font=font_regular, fill=(245, 245, 250, 255))
         text_y += line_height
 
-    brand_text = "Твой ангел-хранитель"
+    brand_text = "Голос души"
     brand_w = draw.textlength(brand_text, font=font_brand)
     draw.text(
         ((WIDTH - brand_w) / 2, HEIGHT - 140),
