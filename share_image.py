@@ -2,7 +2,7 @@ import io
 import os
 import random
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 WIDTH, HEIGHT = 1080, 1920
 FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
@@ -30,6 +30,21 @@ def _vertical_gradient(size, top_color, bottom_color):
     return base
 
 
+def _add_bokeh(img, top_color, bottom_color):
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    palette = [top_color, bottom_color, (255, 255, 255)]
+    for _ in range(6):
+        color = random.choice(palette)
+        r = random.randint(120, 320)
+        cx = random.randint(0, WIDTH)
+        cy = random.randint(0, HEIGHT)
+        alpha = random.randint(50, 110)
+        draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*color, alpha))
+    layer = layer.filter(ImageFilter.GaussianBlur(80))
+    return Image.alpha_composite(img.convert("RGBA"), layer)
+
+
 def _wrap_text(draw, text, font, max_width):
     words = text.split()
     lines = []
@@ -50,32 +65,34 @@ def _wrap_text(draw, text, font, max_width):
 def generate_share_image(phrase: str) -> io.BytesIO:
     top_color, bottom_color = random.choice(GRADIENTS)
     img = _vertical_gradient((WIDTH, HEIGHT), top_color, bottom_color)
+    img = _add_bokeh(img, top_color, bottom_color)
     draw = ImageDraw.Draw(img, "RGBA")
 
-    font_regular = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Regular.ttf"), 34)
-    font_bold = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Bold.ttf"), 34)
-    font_small = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Regular.ttf"), 26)
-    font_avatar = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Bold.ttf"), 32)
+    font_regular = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Regular.ttf"), 44)
+    font_bold = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Bold.ttf"), 38)
+    font_small = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Regular.ttf"), 28)
+    font_avatar = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Bold.ttf"), 36)
+    font_brand = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Regular.ttf"), 30)
 
-    bubble_width = 900
+    bubble_width = 920
     bubble_x = (WIDTH - bubble_width) // 2
-    padding = 40
+    padding = 48
     text_max_width = bubble_width - padding * 2 - 20
 
     lines = _wrap_text(draw, phrase, font_regular, text_max_width)
-    line_height = 46
-    header_height = 70
+    line_height = 58
+    header_height = 80
     bubble_height = header_height + len(lines) * line_height + padding * 2
 
-    bubble_y = int(HEIGHT * 0.38)
+    bubble_y = (HEIGHT - bubble_height) // 2
 
     draw.rounded_rectangle(
         [bubble_x, bubble_y, bubble_x + bubble_width, bubble_y + bubble_height],
-        radius=44,
-        fill=(20, 20, 30, 225),
+        radius=48,
+        fill=(20, 20, 30, 230),
     )
 
-    avatar_r = 30
+    avatar_r = 34
     avatar_cx = bubble_x + padding + avatar_r
     avatar_cy = bubble_y + padding + avatar_r
     draw.ellipse(
@@ -93,13 +110,13 @@ def generate_share_image(phrase: str) -> io.BytesIO:
         fill=(80, 70, 110, 255),
     )
 
-    name_x = avatar_cx + avatar_r + 20
-    draw.text((name_x, bubble_y + padding - 6), SENDER_NAME, font=font_bold, fill=(255, 255, 255, 255))
+    name_x = avatar_cx + avatar_r + 22
+    draw.text((name_x, bubble_y + padding - 4), SENDER_NAME, font=font_bold, fill=(255, 255, 255, 255))
 
     now_text = "сейчас"
     now_w = draw.textlength(now_text, font=font_small)
     draw.text(
-        (bubble_x + bubble_width - padding - now_w, bubble_y + padding),
+        (bubble_x + bubble_width - padding - now_w, bubble_y + padding + 2),
         now_text,
         font=font_small,
         fill=(200, 200, 210, 200),
@@ -107,11 +124,20 @@ def generate_share_image(phrase: str) -> io.BytesIO:
 
     text_y = bubble_y + padding + header_height
     for line in lines:
-        draw.text((bubble_x + padding, text_y), line, font=font_regular, fill=(240, 240, 245, 255))
+        draw.text((bubble_x + padding, text_y), line, font=font_regular, fill=(245, 245, 250, 255))
         text_y += line_height
+
+    brand_text = "Твой ангел-хранитель"
+    brand_w = draw.textlength(brand_text, font=font_brand)
+    draw.text(
+        ((WIDTH - brand_w) / 2, HEIGHT - 140),
+        brand_text,
+        font=font_brand,
+        fill=(60, 55, 70, 180),
+    )
 
     buffer = io.BytesIO()
     buffer.name = "angel.png"
-    img.save(buffer, format="PNG")
+    img.convert("RGB").save(buffer, format="PNG")
     buffer.seek(0)
     return buffer
