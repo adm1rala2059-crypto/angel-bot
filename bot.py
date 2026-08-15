@@ -146,7 +146,7 @@ def handle_share(call):
     bot.send_photo(
         call.message.chat.id,
         image,
-        caption="Можешь поделиться этим в сторис 🤍",
+        caption="Сохрани картинку и выложи в сторис 🤍",
     )
 
 
