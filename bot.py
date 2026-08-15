@@ -1,3 +1,4 @@
+import html
 import json
 import os
 import random
@@ -119,7 +120,11 @@ def handle_accept(call):
         word = "день" if streak % 10 == 1 and streak % 100 != 11 else "дня" if 2 <= streak % 10 <= 4 and not 12 <= streak % 100 <= 14 else "дней"
         streak_line = f"\n\n🔥 Серия: {streak} {word} подряд"
 
-    bot.send_message(call.message.chat.id, f"Это — тебе, здесь и сейчас:\n{gift}{streak_line}")
+    bot.send_message(
+        call.message.chat.id,
+        f"<code>Это — тебе, здесь и сейчас:</code>\n{html.escape(gift)}{streak_line}",
+        parse_mode="HTML",
+    )
 
 
 def should_reengage(last_accept_date: str | None, last_reengagement_date: str | None, today: date) -> bool:
