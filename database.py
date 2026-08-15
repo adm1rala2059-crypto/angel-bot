@@ -75,6 +75,15 @@ def mark_event_accepted(chat_id: int, message_id: int, accepted_at: str):
     conn.commit()
 
 
+def get_event_text(chat_id: int, message_id: int) -> str | None:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT text FROM events WHERE chat_id = ? AND message_id = ?",
+        (chat_id, message_id),
+    ).fetchone()
+    return row[0] if row else None
+
+
 def get_events_since(since_iso: str) -> list[tuple]:
     conn = get_connection()
     return conn.execute(
