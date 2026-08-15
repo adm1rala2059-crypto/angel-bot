@@ -69,6 +69,12 @@ def accept_keyboard() -> types.InlineKeyboardMarkup:
     return markup
 
 
+def share_only_keyboard() -> types.InlineKeyboardMarkup:
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(types.InlineKeyboardButton("💭 Останови мгновение", callback_data="share"))
+    return markup
+
+
 @bot.message_handler(commands=["start"])
 def handle_start(message):
     db.add_subscriber(message.chat.id, message.from_user.first_name or "")
@@ -108,6 +114,7 @@ def handle_accept(call):
         call.message.text + "\n\n✅ Принято",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
+        reply_markup=share_only_keyboard(),
     )
     db.mark_event_accepted(call.message.chat.id, call.message.message_id, datetime.now().isoformat())
 
