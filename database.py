@@ -115,14 +115,6 @@ def set_last_phrase_index(chat_id: int, index: int):
     conn.commit()
 
 
-def set_last_gift_index(chat_id: int, index: int):
-    conn = get_connection()
-    conn.execute(
-        "UPDATE subscribers SET last_gift_index = ? WHERE chat_id = ?", (index, chat_id)
-    )
-    conn.commit()
-
-
 def get_engagement(chat_id: int) -> tuple[str | None, int, str | None]:
     conn = get_connection()
     row = conn.execute(
