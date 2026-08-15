@@ -19,7 +19,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
     raise RuntimeError("Не найден BOT_TOKEN — добавь его в файл .env")
 
-SENDER_NAME = "Твой ангел-хранитель"
+SENDER_NAME = "Голос души"
 SEND_WINDOW_START_HOUR = 9
 SEND_WINDOW_END_HOUR = 21
 QUESTION_PROBABILITY = 0.25
