@@ -1,47 +1,34 @@
+import glob
 import io
 import os
 import random
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 WIDTH, HEIGHT = 1080, 1920
-FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
-
-GRADIENTS = [
-    ((255, 214, 186), (214, 189, 255)),  # персик -> лаванда
-    ((186, 214, 255), (255, 202, 212)),  # пыльный синий -> розовый
-    ((255, 236, 210), (255, 183, 197)),  # кремовый -> коралловый
-    ((205, 232, 210), (255, 245, 224)),  # шалфей -> кремовый
-]
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FONT_DIR = os.path.join(BASE_DIR, "fonts")
+BACKGROUNDS = sorted(glob.glob(os.path.join(BASE_DIR, "backgrounds", "*.jpg")))
 
 SENDER_NAME = "Твой ангел-хранитель"
 
 
-def _vertical_gradient(size, top_color, bottom_color):
-    width, height = size
-    base = Image.new("RGB", size, top_color)
-    draw = ImageDraw.Draw(base)
-    for y in range(height):
-        ratio = y / height
-        r = int(top_color[0] + (bottom_color[0] - top_color[0]) * ratio)
-        g = int(top_color[1] + (bottom_color[1] - top_color[1]) * ratio)
-        b = int(top_color[2] + (bottom_color[2] - top_color[2]) * ratio)
-        draw.line([(0, y), (width, y)], fill=(r, g, b))
-    return base
+def _load_background():
+    path = random.choice(BACKGROUNDS)
+    img = Image.open(path).convert("RGB")
+    if img.size != (WIDTH, HEIGHT):
+        img = img.resize((WIDTH, HEIGHT), Image.LANCZOS)
+    return img
 
 
-def _add_bokeh(img, top_color, bottom_color):
+def _add_bottom_scrim(img):
+    """Тёмный градиент внизу — чтобы подпись бренда читалась на любом фото."""
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
-    palette = [top_color, bottom_color, (255, 255, 255)]
-    for _ in range(6):
-        color = random.choice(palette)
-        r = random.randint(120, 320)
-        cx = random.randint(0, WIDTH)
-        cy = random.randint(0, HEIGHT)
-        alpha = random.randint(50, 110)
-        draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*color, alpha))
-    layer = layer.filter(ImageFilter.GaussianBlur(80))
+    scrim_height = 260
+    for y in range(scrim_height):
+        alpha = int(140 * (y / scrim_height))
+        draw.line([(0, HEIGHT - scrim_height + y), (WIDTH, HEIGHT - scrim_height + y)], fill=(0, 0, 0, alpha))
     return Image.alpha_composite(img.convert("RGBA"), layer)
 
 
@@ -63,9 +50,8 @@ def _wrap_text(draw, text, font, max_width):
 
 
 def generate_share_image(phrase: str) -> io.BytesIO:
-    top_color, bottom_color = random.choice(GRADIENTS)
-    img = _vertical_gradient((WIDTH, HEIGHT), top_color, bottom_color)
-    img = _add_bokeh(img, top_color, bottom_color)
+    img = _load_background()
+    img = _add_bottom_scrim(img)
     draw = ImageDraw.Draw(img, "RGBA")
 
     font_regular = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Regular.ttf"), 44)
