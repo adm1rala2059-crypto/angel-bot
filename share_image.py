@@ -79,7 +79,8 @@ def generate_share_image(phrase: str) -> io.BytesIO:
 
     avatar_r = 34
     avatar_cx = bubble_x + padding + avatar_r
-    avatar_cy = bubble_y + padding + avatar_r
+    header_center_y = bubble_y + padding + avatar_r
+    avatar_cy = header_center_y
 
     glow_layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
     glow_draw = ImageDraw.Draw(glow_layer)
@@ -97,16 +98,15 @@ def generate_share_image(phrase: str) -> io.BytesIO:
     )
 
     name_x = avatar_cx + avatar_r + 22
-    draw.text((name_x, bubble_y + padding - 4), SENDER_NAME, font=font_bold, fill=(255, 255, 255, 255))
+    name_bbox = draw.textbbox((name_x, 0), SENDER_NAME, font=font_bold)
+    name_y = header_center_y - (name_bbox[1] + name_bbox[3]) / 2
+    draw.text((name_x, name_y), SENDER_NAME, font=font_bold, fill=(255, 255, 255, 255))
 
     now_text = "сейчас"
-    now_w = draw.textlength(now_text, font=font_small)
-    draw.text(
-        (bubble_x + bubble_width - padding - now_w, bubble_y + padding + 2),
-        now_text,
-        font=font_small,
-        fill=(200, 200, 210, 200),
-    )
+    now_x = bubble_x + bubble_width - padding - draw.textlength(now_text, font=font_small)
+    now_bbox = draw.textbbox((now_x, 0), now_text, font=font_small)
+    now_y = header_center_y - (now_bbox[1] + now_bbox[3]) / 2
+    draw.text((now_x, now_y), now_text, font=font_small, fill=(200, 200, 210, 200))
 
     text_y = bubble_y + padding + header_height
     for line in lines:
