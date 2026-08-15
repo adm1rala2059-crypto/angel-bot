@@ -3,7 +3,7 @@ import io
 import os
 import random
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 WIDTH, HEIGHT = 1080, 1920
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -80,9 +80,20 @@ def generate_share_image(phrase: str) -> io.BytesIO:
     avatar_r = 34
     avatar_cx = bubble_x + padding + avatar_r
     avatar_cy = bubble_y + padding + avatar_r
+
+    glow_layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(glow_layer)
+    glow_r = 20
+    glow_draw.ellipse(
+        [avatar_cx - glow_r - 15, avatar_cy - glow_r - 15, avatar_cx + glow_r + 15, avatar_cy + glow_r + 15],
+        fill=(255, 250, 230, 220),
+    )
+    glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(10))
+    img = Image.alpha_composite(img, glow_layer)
+    draw = ImageDraw.Draw(img, "RGBA")
     draw.ellipse(
-        [avatar_cx - avatar_r, avatar_cy - avatar_r, avatar_cx + avatar_r, avatar_cy + avatar_r],
-        fill=(240, 235, 245, 255),
+        [avatar_cx - glow_r, avatar_cy - glow_r, avatar_cx + glow_r, avatar_cy + glow_r],
+        fill=(255, 252, 240, 255),
     )
 
     name_x = avatar_cx + avatar_r + 22
