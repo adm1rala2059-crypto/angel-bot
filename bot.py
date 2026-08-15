@@ -61,7 +61,7 @@ def pick_gift(last_index: int) -> tuple[str, int]:
 
 
 def accept_keyboard() -> types.InlineKeyboardMarkup:
-    markup = types.InlineKeyboardMarkup()
+    markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
         types.InlineKeyboardButton("🙏 Принимаю", callback_data="accept"),
         types.InlineKeyboardButton("💭 Останови мгновение", callback_data="share"),
