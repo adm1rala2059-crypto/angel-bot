@@ -64,7 +64,7 @@ def accept_keyboard() -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup()
     markup.add(
         types.InlineKeyboardButton("🙏 Принимаю", callback_data="accept"),
-        types.InlineKeyboardButton("📤 Поделиться", callback_data="share"),
+        types.InlineKeyboardButton("💭 Останови мгновение", callback_data="share"),
     )
     return markup
 
