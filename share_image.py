@@ -57,7 +57,6 @@ def generate_share_image(phrase: str) -> io.BytesIO:
     font_regular = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Regular.ttf"), 44)
     font_bold = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Bold.ttf"), 38)
     font_small = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Regular.ttf"), 28)
-    font_avatar = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Bold.ttf"), 36)
     font_brand = ImageFont.truetype(os.path.join(FONT_DIR, "PTSans-Regular.ttf"), 30)
 
     bubble_width = 920
@@ -84,16 +83,6 @@ def generate_share_image(phrase: str) -> io.BytesIO:
     draw.ellipse(
         [avatar_cx - avatar_r, avatar_cy - avatar_r, avatar_cx + avatar_r, avatar_cy + avatar_r],
         fill=(240, 235, 245, 255),
-    )
-    letter = "А"
-    letter_bbox = draw.textbbox((0, 0), letter, font=font_avatar)
-    letter_w = letter_bbox[2] - letter_bbox[0]
-    letter_h = letter_bbox[3] - letter_bbox[1]
-    draw.text(
-        (avatar_cx - letter_w / 2, avatar_cy - letter_h / 2 - letter_bbox[1]),
-        letter,
-        font=font_avatar,
-        fill=(80, 70, 110, 255),
     )
 
     name_x = avatar_cx + avatar_r + 22
