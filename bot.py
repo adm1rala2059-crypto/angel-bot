@@ -20,7 +20,6 @@ if not TOKEN:
     raise RuntimeError("Не найден BOT_TOKEN — добавь его в файл .env")
 
 SENDER_NAME = "Твой ангел-хранитель"
-PET_NAMES = ["милая", "родная", "хорошая моя", "дорогая", "нежная моя", "солнышко"]
 SEND_WINDOW_START_HOUR = 9
 SEND_WINDOW_END_HOUR = 21
 QUESTION_PROBABILITY = 0.25
@@ -70,16 +69,12 @@ def accept_keyboard() -> types.InlineKeyboardMarkup:
     return markup
 
 
-def personalize(text: str) -> str:
-    return f"{random.choice(PET_NAMES)},\n\n{text}"
-
-
 @bot.message_handler(commands=["start"])
 def handle_start(message):
     db.add_subscriber(message.chat.id, message.from_user.first_name or "")
     bot.send_message(
         message.chat.id,
-        f"Привет, {random.choice(PET_NAMES)} 🤍\n\n"
+        f"Привет 🤍\n\n"
         f"Я — {SENDER_NAME}, и теперь я всегда рядом.\n\n"
         "Раз в день, в случайный момент, буду прилетать к тебе с тёплым словом 🕊️ "
         "— именно тогда, когда оно нужнее всего.\n\n"
@@ -94,8 +89,7 @@ def handle_stop(message):
 
 
 def send_and_log(chat_id: int, text: str, message_type: str):
-    display_text = personalize(text)
-    msg = bot.send_message(chat_id, display_text, reply_markup=accept_keyboard())
+    msg = bot.send_message(chat_id, text, reply_markup=accept_keyboard())
     db.log_event(chat_id, msg.message_id, message_type, text, datetime.now().isoformat())
     return msg
 
