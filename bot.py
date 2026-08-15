@@ -20,6 +20,7 @@ if not TOKEN:
     raise RuntimeError("Не найден BOT_TOKEN — добавь его в файл .env")
 
 SENDER_NAME = "Твой ангел-хранитель"
+PET_NAMES = ["милая", "родная", "хорошая моя", "дорогая", "нежная моя", "солнышко"]
 SEND_WINDOW_START_HOUR = 9
 SEND_WINDOW_END_HOUR = 21
 QUESTION_PROBABILITY = 0.25
@@ -69,18 +70,16 @@ def accept_keyboard() -> types.InlineKeyboardMarkup:
     return markup
 
 
-def personalize(text: str, name: str) -> str:
-    return f"{name},\n\n{text}" if name else text
+def personalize(text: str) -> str:
+    return f"{random.choice(PET_NAMES)},\n\n{text}"
 
 
 @bot.message_handler(commands=["start"])
 def handle_start(message):
-    name = message.from_user.first_name or ""
-    db.add_subscriber(message.chat.id, name)
-    greeting_name = name or "милая"
+    db.add_subscriber(message.chat.id, message.from_user.first_name or "")
     bot.send_message(
         message.chat.id,
-        f"Привет, {greeting_name} 🤍\n\n"
+        f"Привет, {random.choice(PET_NAMES)} 🤍\n\n"
         f"Я — {SENDER_NAME}, и теперь я всегда рядом.\n\n"
         "Раз в день, в случайный момент, буду прилетать к тебе с тёплым словом 🕊️ "
         "— именно тогда, когда оно нужнее всего.\n\n"
@@ -94,8 +93,8 @@ def handle_stop(message):
     bot.send_message(message.chat.id, "Хорошо. Ты можешь вернуться в любой момент, написав /start.")
 
 
-def send_and_log(chat_id: int, text: str, message_type: str, name: str = ""):
-    display_text = personalize(text, name)
+def send_and_log(chat_id: int, text: str, message_type: str):
+    display_text = personalize(text)
     msg = bot.send_message(chat_id, display_text, reply_markup=accept_keyboard())
     db.log_event(chat_id, msg.message_id, message_type, text, datetime.now().isoformat())
     return msg
@@ -105,7 +104,7 @@ def send_and_log(chat_id: int, text: str, message_type: str, name: str = ""):
 def handle_now(message):
     """Тестовая отправка одной фразы прямо сейчас — удобно для проверки, что бот жив."""
     phrase, _ = pick_phrase(-1)
-    send_and_log(message.chat.id, phrase, "test", message.from_user.first_name or "")
+    send_and_log(message.chat.id, phrase, "test")
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "accept")
@@ -171,21 +170,21 @@ def should_reengage(last_accept_date: str | None, last_reengagement_date: str | 
 
 def broadcast_daily_phrase():
     today = date.today()
-    for chat_id, name in db.get_all_subscribers():
+    for chat_id, _name in db.get_all_subscribers():
         last_accept_date, _, last_reengagement_date = db.get_engagement(chat_id)
 
         try:
             if should_reengage(last_accept_date, last_reengagement_date, today):
                 text = random.choice(REENGAGEMENT_MESSAGES)
-                send_and_log(chat_id, text, "reengagement", name)
+                send_and_log(chat_id, text, "reengagement")
                 db.set_last_reengagement_date(chat_id, today.isoformat())
             elif random.random() < QUESTION_PROBABILITY:
                 text = random.choice(QUESTIONS)
-                send_and_log(chat_id, text, "question", name)
+                send_and_log(chat_id, text, "question")
             else:
                 last_index, _ = db.get_indices(chat_id)
                 phrase, new_index = pick_phrase(last_index)
-                send_and_log(chat_id, phrase, "phrase", name)
+                send_and_log(chat_id, phrase, "phrase")
                 db.set_last_phrase_index(chat_id, new_index)
         except telebot.apihelper.ApiException:
             db.remove_subscriber(chat_id)
