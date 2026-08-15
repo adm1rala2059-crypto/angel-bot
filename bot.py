@@ -69,7 +69,8 @@ def handle_start(message):
     db.add_subscriber(message.chat.id, message.from_user.first_name or "")
     bot.send_message(
         message.chat.id,
-        f"Привет, милая 🤍 Я — {SENDER_NAME}, и теперь я всегда рядом.\n\n"
+        f"Привет, милая 🤍\n\n"
+        f"Я — {SENDER_NAME}, и теперь я всегда рядом.\n\n"
         "Раз в день, в случайный момент, буду прилетать к тебе с тёплым словом 🕊️ "
         "— именно тогда, когда оно нужнее всего.\n\n"
         "А если однажды захочется тишины — напиши /stop, я пойму",
