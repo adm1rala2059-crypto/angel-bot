@@ -12,6 +12,7 @@ from telebot import types
 
 import database as db
 from keepalive import start_keepalive_server
+from share_image import generate_share_image
 
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
@@ -61,16 +62,25 @@ def pick_gift(last_index: int) -> tuple[str, int]:
 
 def accept_keyboard() -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🙏 Принимаю", callback_data="accept"))
+    markup.add(
+        types.InlineKeyboardButton("🙏 Принимаю", callback_data="accept"),
+        types.InlineKeyboardButton("📤 Поделиться", callback_data="share"),
+    )
     return markup
+
+
+def personalize(text: str, name: str) -> str:
+    return f"{name},\n\n{text}" if name else text
 
 
 @bot.message_handler(commands=["start"])
 def handle_start(message):
-    db.add_subscriber(message.chat.id, message.from_user.first_name or "")
+    name = message.from_user.first_name or ""
+    db.add_subscriber(message.chat.id, name)
+    greeting_name = name or "милая"
     bot.send_message(
         message.chat.id,
-        f"Привет, милая 🤍\n\n"
+        f"Привет, {greeting_name} 🤍\n\n"
         f"Я — {SENDER_NAME}, и теперь я всегда рядом.\n\n"
         "Раз в день, в случайный момент, буду прилетать к тебе с тёплым словом 🕊️ "
         "— именно тогда, когда оно нужнее всего.\n\n"
@@ -84,8 +94,9 @@ def handle_stop(message):
     bot.send_message(message.chat.id, "Хорошо. Ты можешь вернуться в любой момент, написав /start.")
 
 
-def send_and_log(chat_id: int, text: str, message_type: str):
-    msg = bot.send_message(chat_id, text, reply_markup=accept_keyboard())
+def send_and_log(chat_id: int, text: str, message_type: str, name: str = ""):
+    display_text = personalize(text, name)
+    msg = bot.send_message(chat_id, display_text, reply_markup=accept_keyboard())
     db.log_event(chat_id, msg.message_id, message_type, text, datetime.now().isoformat())
     return msg
 
@@ -94,7 +105,7 @@ def send_and_log(chat_id: int, text: str, message_type: str):
 def handle_now(message):
     """Тестовая отправка одной фразы прямо сейчас — удобно для проверки, что бот жив."""
     phrase, _ = pick_phrase(-1)
-    send_and_log(message.chat.id, phrase, "test")
+    send_and_log(message.chat.id, phrase, "test", message.from_user.first_name or "")
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "accept")
@@ -127,6 +138,18 @@ def handle_accept(call):
     )
 
 
+@bot.callback_query_handler(func=lambda call: call.data == "share")
+def handle_share(call):
+    bot.answer_callback_query(call.id, "✨ Готовлю картинку...")
+    phrase = db.get_event_text(call.message.chat.id, call.message.message_id) or call.message.text
+    image = generate_share_image(phrase)
+    bot.send_photo(
+        call.message.chat.id,
+        image,
+        caption="Можешь поделиться этим в сторис 🤍",
+    )
+
+
 def should_reengage(last_accept_date: str | None, last_reengagement_date: str | None, today: date) -> bool:
     reference_date = last_accept_date or last_reengagement_date
     if reference_date is None:
@@ -148,21 +171,21 @@ def should_reengage(last_accept_date: str | None, last_reengagement_date: str | 
 
 def broadcast_daily_phrase():
     today = date.today()
-    for chat_id, _name in db.get_all_subscribers():
+    for chat_id, name in db.get_all_subscribers():
         last_accept_date, _, last_reengagement_date = db.get_engagement(chat_id)
 
         try:
             if should_reengage(last_accept_date, last_reengagement_date, today):
                 text = random.choice(REENGAGEMENT_MESSAGES)
-                send_and_log(chat_id, text, "reengagement")
+                send_and_log(chat_id, text, "reengagement", name)
                 db.set_last_reengagement_date(chat_id, today.isoformat())
             elif random.random() < QUESTION_PROBABILITY:
                 text = random.choice(QUESTIONS)
-                send_and_log(chat_id, text, "question")
+                send_and_log(chat_id, text, "question", name)
             else:
                 last_index, _ = db.get_indices(chat_id)
                 phrase, new_index = pick_phrase(last_index)
-                send_and_log(chat_id, phrase, "phrase")
+                send_and_log(chat_id, phrase, "phrase", name)
                 db.set_last_phrase_index(chat_id, new_index)
         except telebot.apihelper.ApiException:
             db.remove_subscriber(chat_id)
