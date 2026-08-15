@@ -1,3 +1,4 @@
 pyTelegramBotAPI==4.23.0
 APScheduler==3.10.4
 python-dotenv==1.0.1
+libsql==0.1.11
