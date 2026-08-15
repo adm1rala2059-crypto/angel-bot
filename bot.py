@@ -32,6 +32,7 @@ db.init_db()
 with open("phrases.json", "r", encoding="utf-8") as f:
     _categories = json.load(f)
 PHRASES = [text for texts in _categories.values() for text in texts]
+PHRASE_CATEGORIES = [category for category, texts in _categories.items() for _ in texts]
 
 with open("gifts.json", "r", encoding="utf-8") as f:
     GIFTS = json.load(f)
@@ -56,14 +57,15 @@ def pick_phrase(last_index: int) -> tuple[str, int]:
     return pick_from(PHRASES, last_index)
 
 
-def pick_gift(last_index: int) -> tuple[str, int]:
-    return pick_from(GIFTS, last_index)
+def pick_gift(category: str) -> str:
+    pool = GIFTS.get(category) or GIFTS["общее"]
+    return random.choice(pool)
 
 
-def accept_keyboard() -> types.InlineKeyboardMarkup:
+def accept_keyboard(category: str = "общее") -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
-        types.InlineKeyboardButton("🙏 Принимаю", callback_data="accept"),
+        types.InlineKeyboardButton("🙏 Принимаю", callback_data=f"accept:{category}"),
         types.InlineKeyboardButton("💭 Останови мгновение", callback_data="share"),
     )
     return markup
@@ -94,8 +96,8 @@ def handle_stop(message):
     bot.send_message(message.chat.id, "Хорошо. Ты можешь вернуться в любой момент, написав /start.")
 
 
-def send_and_log(chat_id: int, text: str, message_type: str):
-    msg = bot.send_message(chat_id, text, reply_markup=accept_keyboard())
+def send_and_log(chat_id: int, text: str, message_type: str, category: str = "общее"):
+    msg = bot.send_message(chat_id, text, reply_markup=accept_keyboard(category))
     db.log_event(chat_id, msg.message_id, message_type, text, datetime.now().isoformat())
     return msg
 
@@ -103,11 +105,11 @@ def send_and_log(chat_id: int, text: str, message_type: str):
 @bot.message_handler(commands=["now"])
 def handle_now(message):
     """Тестовая отправка одной фразы прямо сейчас — удобно для проверки, что бот жив."""
-    phrase, _ = pick_phrase(-1)
-    send_and_log(message.chat.id, phrase, "test")
+    index = random.randrange(len(PHRASES))
+    send_and_log(message.chat.id, PHRASES[index], "test", PHRASE_CATEGORIES[index])
 
 
-@bot.callback_query_handler(func=lambda call: call.data == "accept")
+@bot.callback_query_handler(func=lambda call: call.data.startswith("accept"))
 def handle_accept(call):
     bot.answer_callback_query(call.id, "💛")
     bot.edit_message_text(
@@ -118,9 +120,8 @@ def handle_accept(call):
     )
     db.mark_event_accepted(call.message.chat.id, call.message.message_id, datetime.now().isoformat())
 
-    _, last_gift_index = db.get_indices(call.message.chat.id)
-    gift, new_gift_index = pick_gift(last_gift_index)
-    db.set_last_gift_index(call.message.chat.id, new_gift_index)
+    _, _, category = call.data.partition(":")
+    gift = pick_gift(category or "общее")
 
     today = date.today()
     streak = db.record_accept(
@@ -146,7 +147,7 @@ def handle_share(call):
     bot.send_photo(
         call.message.chat.id,
         image,
-        caption="Сохрани картинку и выложи в сторис 🤍",
+        caption="Можешь поделиться этим в сторис 🤍",
     )
 
 
@@ -185,7 +186,7 @@ def broadcast_daily_phrase():
             else:
                 last_index, _ = db.get_indices(chat_id)
                 phrase, new_index = pick_phrase(last_index)
-                send_and_log(chat_id, phrase, "phrase")
+                send_and_log(chat_id, phrase, "phrase", PHRASE_CATEGORIES[new_index])
                 db.set_last_phrase_index(chat_id, new_index)
         except telebot.apihelper.ApiException:
             db.remove_subscriber(chat_id)
