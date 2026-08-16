@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 import libsql
 
@@ -37,6 +38,7 @@ def init_db():
         ("last_accept_date", "TEXT"),
         ("streak", "INTEGER DEFAULT 0"),
         ("last_reengagement_date", "TEXT"),
+        ("subscribed_at", "TEXT"),
     ]:
         if column not in existing_columns:
             conn.execute(f"ALTER TABLE subscribers ADD COLUMN {column} {definition}")
@@ -175,13 +177,18 @@ def set_last_reengagement_date(chat_id: int, date_str: str):
     conn.commit()
 
 
-def add_subscriber(chat_id: int, name: str = ""):
+def add_subscriber(chat_id: int, name: str = "") -> bool:
+    """Adds a subscriber if not already present. Returns True if this was a new subscription."""
     conn = get_connection()
+    already_exists = conn.execute(
+        "SELECT 1 FROM subscribers WHERE chat_id = ?", (chat_id,)
+    ).fetchone() is not None
     conn.execute(
-        "INSERT OR IGNORE INTO subscribers (chat_id, name) VALUES (?, ?)",
-        (chat_id, name),
+        "INSERT OR IGNORE INTO subscribers (chat_id, name, subscribed_at) VALUES (?, ?, ?)",
+        (chat_id, name, datetime.now().isoformat()),
     )
     conn.commit()
+    return not already_exists
 
 
 def remove_subscriber(chat_id: int):

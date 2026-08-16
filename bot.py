@@ -20,6 +20,7 @@ if not TOKEN:
     raise RuntimeError("Не найден BOT_TOKEN — добавь его в файл .env")
 
 SENDER_NAME = "Голос души"
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
 SEND_WINDOW_START_HOUR = 9
 SEND_WINDOW_END_HOUR = 21
 QUESTION_PROBABILITY = 0.25
@@ -79,7 +80,10 @@ def share_only_keyboard() -> types.InlineKeyboardMarkup:
 
 @bot.message_handler(commands=["start"])
 def handle_start(message):
-    db.add_subscriber(message.chat.id, message.from_user.first_name or "")
+    is_new = db.add_subscriber(message.chat.id, message.from_user.first_name or "")
+    if is_new and ADMIN_CHAT_ID and str(message.chat.id) != str(ADMIN_CHAT_ID):
+        name = message.from_user.first_name or message.from_user.username or str(message.chat.id)
+        bot.send_message(ADMIN_CHAT_ID, f"🎉 Новый подписчик: {name}")
     bot.send_message(
         message.chat.id,
         f"Привет, милая 🤍\n\n"
