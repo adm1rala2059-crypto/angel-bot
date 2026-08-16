@@ -39,6 +39,7 @@ def init_db():
         ("streak", "INTEGER DEFAULT 0"),
         ("last_reengagement_date", "TEXT"),
         ("subscribed_at", "TEXT"),
+        ("preferred_category", "TEXT"),
     ]:
         if column not in existing_columns:
             conn.execute(f"ALTER TABLE subscribers ADD COLUMN {column} {definition}")
@@ -139,6 +140,22 @@ def set_last_phrase_index(chat_id: int, index: int):
         "UPDATE subscribers SET last_phrase_index = ? WHERE chat_id = ?", (index, chat_id)
     )
     conn.commit()
+
+
+def set_preferred_category(chat_id: int, category: str | None):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE subscribers SET preferred_category = ? WHERE chat_id = ?", (category, chat_id)
+    )
+    conn.commit()
+
+
+def get_preferred_category(chat_id: int) -> str | None:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT preferred_category FROM subscribers WHERE chat_id = ?", (chat_id,)
+    ).fetchone()
+    return row[0] if row else None
 
 
 def get_engagement(chat_id: int) -> tuple[str | None, int, str | None]:

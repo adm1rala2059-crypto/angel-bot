@@ -26,6 +26,31 @@ SEND_WINDOW_END_HOUR = 21
 QUESTION_PROBABILITY = 0.25
 REENGAGEMENT_AFTER_DAYS = 3
 REENGAGEMENT_REPEAT_AFTER_DAYS = 4
+PREFERRED_CATEGORY_PROBABILITY = 0.7
+BOT_USERNAME = "Tvoyangelhranitelbot"
+
+CATEGORY_LABELS = {
+    "общее": "Всего понемногу",
+    "деньги_работа": "Деньги и работа",
+    "любовь_отношения": "Любовь и отношения",
+    "здоровье_тело": "Здоровье и тело",
+    "кризис_поддержка": "Трудный период, нужна поддержка",
+    "одиночество": "Одиночество",
+    "страх_тревога": "Страх и тревога",
+    "вина_прощение_себя": "Вина, прощение себя",
+    "потеря_горе": "Потеря, горе",
+    "начало_нового_этапа": "Новый этап жизни",
+    "путешествия": "Путешествия, новые горизонты",
+}
+
+STREAK_MILESTONES = {
+    3: "🌱 3 дня подряд — ты начинаешь новую привычку заботы о себе.",
+    7: "🌟 Целая неделя вместе. Это уже маленькая история постоянства.",
+    14: "💎 14 дней подряд — ты держишь слово перед собой, а это редкость.",
+    30: "👑 Месяц подряд! Ты не просто открываешь сообщения — ты каждый день выбираешь себя.",
+    60: "🏵️ 60 дней подряд. Это уже не случайность — это ты.",
+    100: "🏆 100 дней подряд. Невероятно — и это целиком твоя заслуга.",
+}
 
 bot = telebot.TeleBot(TOKEN)
 db.init_db()
@@ -54,8 +79,18 @@ def pick_from(pool: list[str], last_index: int) -> tuple[str, int]:
     return pool[index], index
 
 
-def pick_phrase(last_index: int) -> tuple[str, int]:
-    return pick_from(PHRASES, last_index)
+def pick_phrase(last_index: int, preferred_category: str | None = None) -> tuple[str, int]:
+    candidates = list(range(len(PHRASES)))
+    if preferred_category and random.random() < PREFERRED_CATEGORY_PROBABILITY:
+        narrowed = [i for i in candidates if PHRASE_CATEGORIES[i] == preferred_category]
+        if narrowed:
+            candidates = narrowed
+
+    if last_index in candidates and len(candidates) > 1:
+        candidates = [i for i in candidates if i != last_index]
+
+    index = random.choice(candidates)
+    return PHRASES[index], index
 
 
 def pick_gift(category: str) -> str:
@@ -78,6 +113,18 @@ def share_only_keyboard() -> types.InlineKeyboardMarkup:
     return markup
 
 
+def category_keyboard() -> types.InlineKeyboardMarkup:
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    buttons = [
+        types.InlineKeyboardButton(label, callback_data=f"setcat:{key}")
+        for key, label in CATEGORY_LABELS.items()
+        if key != "общее"
+    ]
+    markup.add(*buttons)
+    markup.add(types.InlineKeyboardButton("🎲 Пусть будет сюрприз", callback_data="setcat:__any__"))
+    return markup
+
+
 @bot.message_handler(commands=["start"])
 def handle_start(message):
     is_new = db.add_subscriber(message.chat.id, message.from_user.first_name or "")
@@ -90,7 +137,48 @@ def handle_start(message):
         f"Я — {SENDER_NAME}, и теперь я всегда рядом.\n\n"
         "Раз в день, в случайный момент, буду прилетать к тебе с тёплым словом 🕊️ "
         "— именно тогда, когда оно нужнее всего.\n\n"
-        "А если однажды захочется тишины — напиши /stop, я пойму",
+        "А если однажды захочется тишины — напиши /stop, я пойму\n"
+        "Захочешь поделиться мной с подругой — напиши /invite",
+    )
+    bot.send_message(
+        message.chat.id,
+        "Что сейчас важнее всего? Буду чаще присылать слова именно про это "
+        "(но иногда — и другое, для разнообразия)",
+        reply_markup=category_keyboard(),
+    )
+
+
+@bot.message_handler(commands=["category"])
+def handle_category(message):
+    bot.send_message(
+        message.chat.id,
+        "О чём тебе сейчас важнее всего слышать?",
+        reply_markup=category_keyboard(),
+    )
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("setcat:"))
+def handle_set_category(call):
+    _, _, category = call.data.partition(":")
+    category = None if category == "__any__" else category
+    db.set_preferred_category(call.message.chat.id, category)
+    label = CATEGORY_LABELS.get(category, "всего понемногу") if category else "всего понемногу"
+    bot.answer_callback_query(call.id, "Готово 🤍")
+    bot.edit_message_text(
+        f"Хорошо, буду чаще писать про: {label}. Изменить можно в любой момент через /category",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+    )
+
+
+@bot.message_handler(commands=["invite"])
+def handle_invite(message):
+    bot.send_message(
+        message.chat.id,
+        "Перешли это тому, кому сейчас может пригодиться тёплое слово 🤍\n\n"
+        f"У меня есть бот «{SENDER_NAME}» — раз в день присылает поддерживающую фразу, "
+        f"именно тогда, когда она нужнее всего:\n"
+        f"https://t.me/{BOT_USERNAME}",
     )
 
 
@@ -142,6 +230,10 @@ def handle_accept(call):
         parse_mode="HTML",
     )
 
+    milestone_text = STREAK_MILESTONES.get(streak)
+    if milestone_text:
+        bot.send_message(call.message.chat.id, milestone_text)
+
 
 @bot.callback_query_handler(func=lambda call: call.data == "share")
 def handle_share(call):
@@ -189,7 +281,8 @@ def broadcast_daily_phrase():
                 send_and_log(chat_id, text, "question")
             else:
                 last_index, _ = db.get_indices(chat_id)
-                phrase, new_index = pick_phrase(last_index)
+                preferred_category = db.get_preferred_category(chat_id)
+                phrase, new_index = pick_phrase(last_index, preferred_category)
                 send_and_log(chat_id, phrase, "phrase", PHRASE_CATEGORIES[new_index])
                 db.set_last_phrase_index(chat_id, new_index)
         except telebot.apihelper.ApiException:
