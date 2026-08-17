@@ -45,7 +45,11 @@ class _PingHandler(BaseHTTPRequestHandler):
             for chat_id, name, sent_at, message_type, text, accepted_at in rows
         ]
         payload = json.dumps(
-            {"total_subscribers": db.count_subscribers(), "today_events": events},
+            {
+                "total_subscribers": db.count_subscribers(),
+                "last_broadcast_date": db.get_meta("last_broadcast_date"),
+                "today_events": events,
+            },
             ensure_ascii=False,
         ).encode("utf-8")
 
