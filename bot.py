@@ -268,27 +268,30 @@ def should_reengage(last_accept_date: str | None, last_reengagement_date: str | 
 
 def broadcast_daily_phrase():
     today = date.today()
-    for chat_id, _name in db.get_all_subscribers():
-        last_accept_date, _, last_reengagement_date = db.get_engagement(chat_id)
+    try:
+        for chat_id, _name in db.get_all_subscribers():
+            last_accept_date, _, last_reengagement_date = db.get_engagement(chat_id)
 
-        try:
-            if should_reengage(last_accept_date, last_reengagement_date, today):
-                text = random.choice(REENGAGEMENT_MESSAGES)
-                send_and_log(chat_id, text, "reengagement")
-                db.set_last_reengagement_date(chat_id, today.isoformat())
-            elif random.random() < QUESTION_PROBABILITY:
-                text = random.choice(QUESTIONS)
-                send_and_log(chat_id, text, "question")
-            else:
-                last_index, _ = db.get_indices(chat_id)
-                preferred_category = db.get_preferred_category(chat_id)
-                phrase, new_index = pick_phrase(last_index, preferred_category)
-                send_and_log(chat_id, phrase, "phrase", PHRASE_CATEGORIES[new_index])
-                db.set_last_phrase_index(chat_id, new_index)
-        except telebot.apihelper.ApiException:
-            db.remove_subscriber(chat_id)
+            try:
+                if should_reengage(last_accept_date, last_reengagement_date, today):
+                    text = random.choice(REENGAGEMENT_MESSAGES)
+                    send_and_log(chat_id, text, "reengagement")
+                    db.set_last_reengagement_date(chat_id, today.isoformat())
+                elif random.random() < QUESTION_PROBABILITY:
+                    text = random.choice(QUESTIONS)
+                    send_and_log(chat_id, text, "question")
+                else:
+                    last_index, _ = db.get_indices(chat_id)
+                    preferred_category = db.get_preferred_category(chat_id)
+                    phrase, new_index = pick_phrase(last_index, preferred_category)
+                    send_and_log(chat_id, phrase, "phrase", PHRASE_CATEGORIES[new_index])
+                    db.set_last_phrase_index(chat_id, new_index)
+            except telebot.apihelper.ApiException:
+                db.remove_subscriber(chat_id)
 
-    db.set_meta("last_broadcast_date", today.isoformat())
+        db.set_meta("last_broadcast_date", today.isoformat())
+    except Exception as e:
+        print(f"Рассылка упала с ошибкой: {e}")
 
 
 def schedule_todays_broadcast(scheduler: BackgroundScheduler):

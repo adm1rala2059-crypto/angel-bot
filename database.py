@@ -16,6 +16,29 @@ def get_connection():
     return _conn
 
 
+def run(sql: str, params: tuple = (), commit: bool = False):
+    """Executes a query, retrying once on a fresh connection if the cached one is dead.
+
+    Turso's remote (Hrana) connection can go stale after several hours idle in this
+    long-running process ("stream not found" ValueError) — the cached global connection
+    doesn't detect that on its own, so on any failure we drop it and reconnect once.
+    """
+    global _conn
+    conn = get_connection()
+    try:
+        result = conn.execute(sql, params)
+        if commit:
+            conn.commit()
+        return result
+    except Exception:
+        _conn = None
+        conn = get_connection()
+        result = conn.execute(sql, params)
+        if commit:
+            conn.commit()
+        return result
+
+
 def init_db():
     conn = get_connection()
     conn.execute(
@@ -70,41 +93,36 @@ def init_db():
 
 
 def get_meta(key: str) -> str | None:
-    conn = get_connection()
-    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    row = run("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
     return row[0] if row else None
 
 
 def set_meta(key: str, value: str):
-    conn = get_connection()
-    conn.execute(
+    run(
         "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (key, value),
+        commit=True,
     )
-    conn.commit()
 
 
 def log_event(chat_id: int, message_id: int, message_type: str, text: str, sent_at: str):
-    conn = get_connection()
-    conn.execute(
+    run(
         "INSERT INTO events (chat_id, message_id, message_type, text, sent_at) VALUES (?, ?, ?, ?, ?)",
         (chat_id, message_id, message_type, text, sent_at),
+        commit=True,
     )
-    conn.commit()
 
 
 def mark_event_accepted(chat_id: int, message_id: int, accepted_at: str):
-    conn = get_connection()
-    conn.execute(
+    run(
         "UPDATE events SET accepted_at = ? WHERE chat_id = ? AND message_id = ?",
         (accepted_at, chat_id, message_id),
+        commit=True,
     )
-    conn.commit()
 
 
 def get_event_text(chat_id: int, message_id: int) -> str | None:
-    conn = get_connection()
-    row = conn.execute(
+    row = run(
         "SELECT text FROM events WHERE chat_id = ? AND message_id = ?",
         (chat_id, message_id),
     ).fetchone()
@@ -112,8 +130,7 @@ def get_event_text(chat_id: int, message_id: int) -> str | None:
 
 
 def get_events_since(since_iso: str) -> list[tuple]:
-    conn = get_connection()
-    return conn.execute(
+    return run(
         """
         SELECT e.chat_id, s.name, e.sent_at, e.message_type, e.text, e.accepted_at
         FROM events e
@@ -126,8 +143,7 @@ def get_events_since(since_iso: str) -> list[tuple]:
 
 
 def get_indices(chat_id: int) -> tuple[int, int]:
-    conn = get_connection()
-    row = conn.execute(
+    row = run(
         "SELECT last_phrase_index, last_gift_index FROM subscribers WHERE chat_id = ?",
         (chat_id,),
     ).fetchone()
@@ -135,32 +151,26 @@ def get_indices(chat_id: int) -> tuple[int, int]:
 
 
 def set_last_phrase_index(chat_id: int, index: int):
-    conn = get_connection()
-    conn.execute(
-        "UPDATE subscribers SET last_phrase_index = ? WHERE chat_id = ?", (index, chat_id)
-    )
-    conn.commit()
+    run("UPDATE subscribers SET last_phrase_index = ? WHERE chat_id = ?", (index, chat_id), commit=True)
 
 
 def set_preferred_category(chat_id: int, category: str | None):
-    conn = get_connection()
-    conn.execute(
-        "UPDATE subscribers SET preferred_category = ? WHERE chat_id = ?", (category, chat_id)
+    run(
+        "UPDATE subscribers SET preferred_category = ? WHERE chat_id = ?",
+        (category, chat_id),
+        commit=True,
     )
-    conn.commit()
 
 
 def get_preferred_category(chat_id: int) -> str | None:
-    conn = get_connection()
-    row = conn.execute(
+    row = run(
         "SELECT preferred_category FROM subscribers WHERE chat_id = ?", (chat_id,)
     ).fetchone()
     return row[0] if row else None
 
 
 def get_engagement(chat_id: int) -> tuple[str | None, int, str | None]:
-    conn = get_connection()
-    row = conn.execute(
+    row = run(
         "SELECT last_accept_date, streak, last_reengagement_date FROM subscribers WHERE chat_id = ?",
         (chat_id,),
     ).fetchone()
@@ -176,49 +186,42 @@ def record_accept(chat_id: int, today: str, yesterday: str) -> int:
     else:
         new_streak = 1
 
-    conn = get_connection()
-    conn.execute(
+    run(
         "UPDATE subscribers SET last_accept_date = ?, streak = ? WHERE chat_id = ?",
         (today, new_streak, chat_id),
+        commit=True,
     )
-    conn.commit()
     return new_streak
 
 
 def set_last_reengagement_date(chat_id: int, date_str: str):
-    conn = get_connection()
-    conn.execute(
+    run(
         "UPDATE subscribers SET last_reengagement_date = ? WHERE chat_id = ?",
         (date_str, chat_id),
+        commit=True,
     )
-    conn.commit()
 
 
 def add_subscriber(chat_id: int, name: str = "") -> bool:
     """Adds a subscriber if not already present. Returns True if this was a new subscription."""
-    conn = get_connection()
-    already_exists = conn.execute(
+    already_exists = run(
         "SELECT 1 FROM subscribers WHERE chat_id = ?", (chat_id,)
     ).fetchone() is not None
-    conn.execute(
+    run(
         "INSERT OR IGNORE INTO subscribers (chat_id, name, subscribed_at) VALUES (?, ?, ?)",
         (chat_id, name, datetime.now().isoformat()),
+        commit=True,
     )
-    conn.commit()
     return not already_exists
 
 
 def remove_subscriber(chat_id: int):
-    conn = get_connection()
-    conn.execute("DELETE FROM subscribers WHERE chat_id = ?", (chat_id,))
-    conn.commit()
+    run("DELETE FROM subscribers WHERE chat_id = ?", (chat_id,), commit=True)
 
 
 def get_all_subscribers():
-    conn = get_connection()
-    return conn.execute("SELECT chat_id, name FROM subscribers").fetchall()
+    return run("SELECT chat_id, name FROM subscribers").fetchall()
 
 
 def count_subscribers() -> int:
-    conn = get_connection()
-    return conn.execute("SELECT COUNT(*) FROM subscribers").fetchone()[0]
+    return run("SELECT COUNT(*) FROM subscribers").fetchone()[0]
