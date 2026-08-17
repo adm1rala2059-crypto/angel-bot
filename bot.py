@@ -322,12 +322,64 @@ def schedule_next_day_planner(scheduler: BackgroundScheduler):
     )
 
 
+def broadcast_sent_today() -> bool:
+    today_start = date.today().isoformat() + "T00:00:00"
+    events = db.get_events_since(today_start)
+    return any(message_type in ("phrase", "question", "reengagement") for *_, message_type, _, _ in events)
+
+
+def run_health_check_and_report():
+    """Ежедневная самопроверка: убеждается, что сегодняшняя рассылка реально ушла,
+    сама чинит расхождение между events и meta, и репортит Наталье в личку бота
+    независимо от результата — так безопаснее, чем доверять внешней проверке,
+    у которой нет прямого доступа к базе и Telegram (см. инцидент 2026-08-16,
+    когда протухшее соединение с Turso сорвало запись last_broadcast_date)."""
+    if not ADMIN_CHAT_ID:
+        return
+
+    today_iso = date.today().isoformat()
+    try:
+        subscriber_count = db.count_subscribers()
+        last_broadcast = db.get_meta("last_broadcast_date")
+        action = "не потребовалось"
+
+        if last_broadcast != today_iso:
+            if broadcast_sent_today():
+                db.set_meta("last_broadcast_date", today_iso)
+                last_broadcast = today_iso
+                action = "рассылка ушла, но не записалась в базу — записала задним числом"
+            else:
+                action = "рассылка сегодня не уходила вообще — запускаю сейчас как аварийную"
+                broadcast_daily_phrase()
+                last_broadcast = db.get_meta("last_broadcast_date")
+
+        ok = last_broadcast == today_iso
+        status_line = "✅ рассылка сегодня прошла нормально" if ok else "⚠️ рассылка сегодня так и не подтвердилась — нужна ручная проверка"
+        message = (
+            "🌙 Вечерняя самопроверка бота\n\n"
+            f"Подписчиков: {subscriber_count}\n"
+            f"{status_line}\n"
+            f"Действие: {action}"
+        )
+        bot.send_message(ADMIN_CHAT_ID, message)
+    except Exception as e:
+        try:
+            bot.send_message(ADMIN_CHAT_ID, f"⚠️ Вечерняя самопроверка упала с ошибкой: {e}")
+        except Exception:
+            print(f"Самопроверка и уведомление об ошибке оба упали: {e}")
+
+
+def schedule_health_check(scheduler: BackgroundScheduler):
+    scheduler.add_job(run_health_check_and_report, "cron", hour=21, minute=35)
+
+
 if __name__ == "__main__":
     start_keepalive_server()
 
     scheduler = BackgroundScheduler()
     schedule_todays_broadcast(scheduler)
     schedule_next_day_planner(scheduler)
+    schedule_health_check(scheduler)
     scheduler.start()
 
     print(f"Бот запущен. Фраз в базе: {len(PHRASES)}. Подписчиков: {db.count_subscribers()}")
