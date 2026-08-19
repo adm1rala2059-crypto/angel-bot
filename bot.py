@@ -184,7 +184,7 @@ def handle_invite(message):
 
 @bot.message_handler(commands=["stop"])
 def handle_stop(message):
-    db.remove_subscriber(message.chat.id)
+    db.remove_subscriber(message.chat.id, reason="self_stop")
     bot.send_message(message.chat.id, "Хорошо. Ты можешь вернуться в любой момент, написав /start.")
 
 
@@ -286,8 +286,9 @@ def broadcast_daily_phrase():
                     phrase, new_index = pick_phrase(last_index, preferred_category)
                     send_and_log(chat_id, phrase, "phrase", PHRASE_CATEGORIES[new_index])
                     db.set_last_phrase_index(chat_id, new_index)
-            except telebot.apihelper.ApiException:
-                db.remove_subscriber(chat_id)
+            except telebot.apihelper.ApiException as e:
+                reason = "blocked" if "blocked" in str(e).lower() else "api_error"
+                db.remove_subscriber(chat_id, reason=reason)
 
         db.set_meta("last_broadcast_date", today.isoformat())
     except Exception as e:

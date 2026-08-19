@@ -89,6 +89,18 @@ def init_db():
         )
         """
     )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS unsubscribe_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            name TEXT,
+            reason TEXT,
+            unsubscribed_at TEXT
+        )
+        """
+    )
     conn.commit()
 
 
@@ -215,8 +227,21 @@ def add_subscriber(chat_id: int, name: str = "") -> bool:
     return not already_exists
 
 
-def remove_subscriber(chat_id: int):
+def remove_subscriber(chat_id: int, reason: str = "unknown"):
+    row = run("SELECT name FROM subscribers WHERE chat_id = ?", (chat_id,)).fetchone()
+    name = row[0] if row else None
+    run(
+        "INSERT INTO unsubscribe_log (chat_id, name, reason, unsubscribed_at) VALUES (?, ?, ?, ?)",
+        (chat_id, name, reason, datetime.now().isoformat()),
+        commit=True,
+    )
     run("DELETE FROM subscribers WHERE chat_id = ?", (chat_id,), commit=True)
+
+
+def get_unsubscribe_log() -> list[tuple]:
+    return run(
+        "SELECT chat_id, name, reason, unsubscribed_at FROM unsubscribe_log ORDER BY unsubscribed_at"
+    ).fetchall()
 
 
 def get_all_subscribers():
